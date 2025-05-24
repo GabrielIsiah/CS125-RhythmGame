@@ -18,14 +18,14 @@ COLORS = {
     "GREEN": "#d7fcd4",
     "WHITE": "White",
     "BLACK": "black",
-    "HOVER_GREEN": "#a0f5b0", # A slightly different green for hover effect if needed
-    "RED": "red" # Added Red color
+    "HOVER_GREEN": "#a0f5b0", 
+    "RED": "red" 
 }
 
 # Asset paths
 ASSET_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets")
 BG_PATH = os.path.join(ASSET_DIR, "background.png")
-FONT_PATH = os.path.join(ASSET_DIR, "Grand9k Pixel.ttf") # Updated to use the correct font filename
+FONT_PATH = os.path.join(ASSET_DIR, "Grand9k Pixel.ttf") 
 
 # Load assets
 try:
@@ -41,9 +41,9 @@ except Exception as e: # Catch other exceptions as well
 
 def get_font(size):
     """Get a font object with the specified size."""
-    # Replace 'None' with FONT_PATH if you add a pixel font file
+    
     try:
-        return pygame.font.Font(FONT_PATH, size) # Use this line if you have a pixel font file
+        return pygame.font.Font(FONT_PATH, size) 
         # return pygame.font.Font(None, size)  # Using default font if no file specified
     except pygame.error:
         print(f"Warning: Could not load font from {FONT_PATH}. Using system font.") # Simplified error message
