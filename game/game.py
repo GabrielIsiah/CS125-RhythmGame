@@ -34,10 +34,14 @@ class Game:
         self.background.fill('White')
         self.font = pygame.font.SysFont(None, 48)
         self.combo_font = pygame.font.SysFont(None, 72)  # Larger font for combo display
+        self.pause_font = pygame.font.SysFont(None, 120)  # Large font for pause text
         
         # Initialize game state
         self.start_ticks = pygame.time.get_ticks()
         self.running = True
+        self.paused = False
+        self.pause_start_time = 0
+        self.total_paused_time = 0  # Track total time spent paused
         
         # Load game data
         self.arrow_spawner.add_timestamps()
@@ -51,18 +55,44 @@ class Game:
                 sys.exit()
 
             if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_d:
-                    self.hit_detector.check_hit('d', self.arrow_group, self.outline_group)
-                elif event.key == pygame.K_f:
-                    self.hit_detector.check_hit('f', self.arrow_group, self.outline_group)
-                elif event.key == pygame.K_j:
-                    self.hit_detector.check_hit('j', self.arrow_group, self.outline_group)
-                elif event.key == pygame.K_k:
-                    self.hit_detector.check_hit('k', self.arrow_group, self.outline_group)
+                if event.key == pygame.K_ESCAPE:
+                    self.toggle_pause()
+                elif not self.paused:  # Only process game keys when not paused
+                    if event.key == pygame.K_d:
+                        self.hit_detector.check_hit('d', self.arrow_group, self.outline_group)
+                    elif event.key == pygame.K_f:
+                        self.hit_detector.check_hit('f', self.arrow_group, self.outline_group)
+                    elif event.key == pygame.K_j:
+                        self.hit_detector.check_hit('j', self.arrow_group, self.outline_group)
+                    elif event.key == pygame.K_k:
+                        self.hit_detector.check_hit('k', self.arrow_group, self.outline_group)
+
+    def toggle_pause(self):
+        self.paused = not self.paused
+        if self.paused:
+            self.pause_start_time = pygame.time.get_ticks()
+            pygame.mixer.pause()  # Pause the music
+        else:
+            # Add the time spent in this pause to the total paused time
+            self.total_paused_time += pygame.time.get_ticks() - self.pause_start_time
+            pygame.mixer.unpause()  # Resume the music
+
+    def get_elapsed_time(self):
+        """Calculate the actual elapsed time, accounting for pauses"""
+        current_time = pygame.time.get_ticks()
+        if self.paused:
+            # If paused, use the time when we paused
+            elapsed = self.pause_start_time - self.start_ticks - self.total_paused_time
+        else:
+            # If not paused, use current time
+            elapsed = current_time - self.start_ticks - self.total_paused_time
+        return elapsed / 1000  # Convert to seconds
 
     def update(self):
-        elapsed_ms = pygame.time.get_ticks() - self.start_ticks
-        elapsed_sec = elapsed_ms / 1000
+        if self.paused:
+            return
+
+        elapsed_sec = self.get_elapsed_time()
 
         # Start music after delay
         if elapsed_sec >= MUSIC_START_DELAY and not self.music_started:
@@ -86,8 +116,8 @@ class Game:
         # Clear screen
         self.display.blit(self.background, (0, 0))
 
-        # Draw timer
-        elapsed_sec = (pygame.time.get_ticks() - self.start_ticks) / 1000
+        # Draw timer using the new elapsed time calculation
+        elapsed_sec = self.get_elapsed_time()
         timer_text = self.font.render(f"Time: {elapsed_sec:.2f}s", True, (255, 0, 0))
         self.display.blit(timer_text, (100, 80))
 
@@ -119,6 +149,19 @@ class Game:
                 self.hit_detector.hit_color = (0, 0, 0)
                 self.hit_detector.combo_hits = 0
                 self.hit_detector.combo_score = 0
+
+        # Draw pause screen if paused
+        if self.paused:
+            # Create a semi-transparent overlay
+            overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 128))  # Black with 50% opacity
+            self.display.blit(overlay, (0, 0))
+            
+            # Draw "PAUSED" text
+            pause_text = self.pause_font.render("PAUSED", True, (255, 255, 255))  # White text
+            pause_x = (WINDOW_WIDTH - pause_text.get_width()) // 2
+            pause_y = (WINDOW_HEIGHT - pause_text.get_height()) // 2
+            self.display.blit(pause_text, (pause_x, pause_y))
 
         pygame.display.update()
 
