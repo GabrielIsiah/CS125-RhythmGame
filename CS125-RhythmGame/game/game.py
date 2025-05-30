@@ -9,12 +9,17 @@ from game.hit_detection import HitDetector
 from game.arrow_spawner import ArrowSpawner
 from game.outline_manager import OutlineManager
 from Utility.font_manager import font_manager
+# SONGS will be passed in from the menu
+# from game.menu import SONGS
 
 class Game:
-    def __init__(self, outlines, arrows, song_key="song1", difficulty="easy"):
+    def __init__(self, outlines, arrows, songs_data, song_key="song1", difficulty="easy", mode="normal"):
         # Initialize pygame components
         pygame.mixer.init()
         
+        # Store songs data
+        self.songs_data = songs_data
+
         # Set up display (already initialized in main.py)
         self.display = pygame.display.get_surface()
         pygame.display.set_caption('Rhythm Game')
@@ -23,12 +28,25 @@ class Game:
         self.arrow_group = pygame.sprite.Group()
         self.outline_group = pygame.sprite.Group()
         self.hit_detector = HitDetector()
-        self.arrow_spawner = ArrowSpawner(arrows)
+        # Pass the selected song_key and songs_data to the ArrowSpawner
+        self.arrow_spawner = ArrowSpawner(arrows, self.songs_data)
         self.outline_manager = OutlineManager(outlines)
         
         # Set up music
-        self.music_path = os.path.join('assets', 'audio', 'song.mp3')
-        pygame.mixer.music.load(self.music_path)
+        # Get music file path from songs_data dictionary
+        song_info = self.songs_data.get(song_key)
+        if song_info and "music_file" in song_info:
+            self.music_path = os.path.join(song_info["music_file"])
+            print(f"[DEBUG] Attempting to load music from: {self.music_path}")
+            try:
+                pygame.mixer.music.load(self.music_path)
+                print("[DEBUG] Music file loaded successfully")
+            except Exception as e:
+                print(f"[ERROR] Failed to load music file: {e}")
+        else:
+            print(f"[ERROR] Music file not found for song key: {song_key}")
+            self.music_path = None # Or set a default error sound
+            
         self.music_started = False
         self.music_position = 0  # Store music position for pause/resume
         
@@ -43,7 +61,7 @@ class Game:
         self.running = True
         self.song_key = song_key
         self.difficulty = difficulty
-        self.arrow_speed = DIFFICULTY_SPEEDS[difficulty]
+        self.arrow_speed = DIFFICULTY_SPEEDS.get(difficulty, DIFFICULTY_SPEEDS['easy']) # Use .get with a default for safety
         self.show_results = False
         self.waiting_for_results = False
         self.song_end_time = None
@@ -58,12 +76,21 @@ class Game:
         self.pause_buttons = []
         self.pause_font = font_manager.get_font(72)
         self.pause_small_font = font_manager.get_font(48)
+        self.mode = mode # Store the game mode
+        self.next_action = None # To store the action requested by the user (e.g., 'restart', 'quit')
         
         # Load game data
         if song_key == "pattern":  # Use pattern system instead of CSV
             self.arrow_spawner.start_pattern_mode(difficulty)
         else:
-            self.arrow_spawner.add_timestamps()
+            # Pass the song_key to add_timestamps for normal mode
+            if self.mode == "normal":
+                 self.arrow_spawner.add_timestamps(song_key)
+            # For endless mode, we might need a different spawner logic or continuous pattern generation
+            # For now, we'll still load the timestamps but the game end logic will differ
+            else:
+                 self.arrow_spawner.add_timestamps(song_key) # Still load timestamps for basic arrow data
+
         self.outline_manager.add_outlines(self.outline_group)
 
     def handle_events(self):
@@ -95,9 +122,14 @@ class Game:
 
         # Start music after delay
         if elapsed_sec >= MUSIC_START_DELAY and not self.music_started:
-            pygame.mixer.music.play()
-            pygame.mixer.music.set_volume(0.3)
-            self.music_started = True
+            print("[DEBUG] Attempting to play music")
+            try:
+                pygame.mixer.music.play()
+                pygame.mixer.music.set_volume(0.3)
+                print("[DEBUG] Music started playing")
+                self.music_started = True
+            except Exception as e:
+                print(f"[ERROR] Failed to play music: {e}")
 
         # If results popup is showing, do not update game state
         if self.show_results:
@@ -111,15 +143,20 @@ class Game:
                 self.init_results_popup()
             return
 
-        # Detect end of song (music stopped)
-        if self.music_started and not pygame.mixer.music.get_busy() and not self.waiting_for_results and not self.paused:
-            self.final_score = self.hit_detector.score
-            self.final_time = elapsed_sec
-            self.song_end_time = pygame.time.get_ticks()
-            # Capture the last frame
-            self.last_frame = self.display.copy()
-            self.waiting_for_results = True
-            return
+        # Detect end of song (music stopped) - only in normal mode
+        if self.mode == "normal": # Add mode check here
+            if self.music_started and not pygame.mixer.music.get_busy() and not self.waiting_for_results and not self.paused:
+                self.final_score = self.hit_detector.score
+                self.final_time = elapsed_sec
+                self.song_end_time = pygame.time.get_ticks()
+                # Capture the last frame
+                self.last_frame = self.display.copy()
+                self.waiting_for_results = True
+                # Clear the arrow group to prevent arrows from showing on the results screen
+                self.arrow_group.empty()
+                # Stop the arrow spawner from generating new arrows
+                self.arrow_spawner.spawning_allowed = False
+                return
 
         # Update arrow positions and check for misses
         for arrow in self.arrow_group:
@@ -138,23 +175,40 @@ class Game:
         center_x = WINDOW_WIDTH // 2
         center_y = WINDOW_HEIGHT // 2
         button_gap = 90
-        self.results_buttons = [
-            {
-                'label': 'RESTART',
-                'rect': pygame.Rect(center_x-150, center_y+40, 300, 70),
-                'hover': False
-            },
-            {
-                'label': 'DIFFICULTY',
-                'rect': pygame.Rect(center_x-150, center_y+40+button_gap, 300, 70),
-                'hover': False
-            },
-            {
-                'label': 'QUIT',
-                'rect': pygame.Rect(center_x-150, center_y+40+2*button_gap, 300, 70),
-                'hover': False
-            }
-        ]
+
+        # Define buttons based on mode
+        if self.mode == "normal":
+            self.results_buttons = [
+                {
+                    'label': 'RESTART',
+                    'rect': pygame.Rect(center_x-150, center_y+40, 300, 70),
+                    'hover': False
+                },
+                {
+                    'label': 'DIFFICULTY',
+                    'rect': pygame.Rect(center_x-150, center_y+40+button_gap, 300, 70),
+                    'hover': False
+                },
+                {
+                    'label': 'QUIT',
+                    'rect': pygame.Rect(center_x-150, center_y+40+2*button_gap, 300, 70),
+                    'hover': False
+                }
+            ]
+        # In endless mode, define a different set of buttons, maybe just QUIT and RESTART Endless
+        elif self.mode == "endless":
+             self.results_buttons = [
+                {
+                    'label': 'RESTART ENDLESS',
+                    'rect': pygame.Rect(center_x-150, center_y+40, 300, 70),
+                    'hover': False
+                },
+                {
+                    'label': 'QUIT',
+                    'rect': pygame.Rect(center_x-150, center_y+40+button_gap, 300, 70),
+                    'hover': False
+                }
+             ]
 
     def draw_results_popup(self):
         # Dim background
@@ -162,16 +216,24 @@ class Game:
         overlay.fill((0,0,0,180))
         self.display.blit(overlay, (0,0))
         # Popup box
-        popup_rect = pygame.Rect(WINDOW_WIDTH//2-250, WINDOW_HEIGHT//2-200, 500, 400)
+        popup_rect = pygame.Rect(WINDOW_WIDTH//2-275, WINDOW_HEIGHT//2-250, 550, 500) # Increased width to 550 and adjusted x for centering
         pygame.draw.rect(self.display, (40,40,40), popup_rect, border_radius=20)
         pygame.draw.rect(self.display, (200,200,200), popup_rect, 4, border_radius=20)
         # Score
         score_text = self.results_font.render(f"Score: {self.final_score}", True, (255,255,0))
-        score_rect = score_text.get_rect(center=(WINDOW_WIDTH//2, WINDOW_HEIGHT//2-80))
+        score_rect = score_text.get_rect(center=(WINDOW_WIDTH//2, WINDOW_HEIGHT//2-150))
         self.display.blit(score_text, score_rect)
         # Buttons
         mouse_pos = pygame.mouse.get_pos()
-        for btn in self.results_buttons:
+
+
+        # Let's try placing the first button closer to the score
+        button_y_start = WINDOW_HEIGHT//2 - 20 # Adjusted starting position for buttons (moved upwards)
+        button_gap = 100 # Keep existing button gap
+        
+        for i, btn in enumerate(self.results_buttons):
+            # Adjust button vertical position based on the new starting point and gap
+            btn['rect'].center = (WINDOW_WIDTH//2, button_y_start + i * button_gap)
             btn['hover'] = btn['rect'].collidepoint(mouse_pos)
             color = (255,0,0) if btn['hover'] else (255,255,255)
             pygame.draw.rect(self.display, color, btn['rect'], border_radius=10, width=3)
@@ -187,13 +249,43 @@ class Game:
             if event.type == pygame.MOUSEBUTTONDOWN:
                 for btn in self.results_buttons:
                     if btn['hover']:
-                        # Placeholder: print which button was pressed
-                        print(f"Button pressed: {btn['label']}")
-                        # Actions will be implemented later
+                        # Handle button actions based on mode
+                        if self.mode == "normal":
+                            if btn['label'] == 'RESTART':
+                                # Restart the current song and difficulty
+                                self.running = False # Stop the current game instance
+                                # The start_game function in menu.py will be called after this instance ends
+                                # with the same song_key and difficulty
+                                self.next_action = 'restart'
+                            elif btn['label'] == 'DIFFICULTY':
+                                # Go back to difficulty selection for the current song
+                                self.running = False # Stop the current game instance
+                                # The song_selection_menu will be called after this instance ends,
+                                # and then pattern_selection will be called from there.
+                                # We need a way to pass the selected_song_key back.
+                                # This might require restructuring the menu flow slightly.
+                                # For now, we'll just go back to main menu as a temporary measure.
+                                # TODO: Implement proper return to difficulty selection.
+                                # For now, setting running to False and letting menu handle the return
+                                pass # Let the menu handle returning
+                            elif btn['label'] == 'QUIT':
+                                self.running = False # Stop the current game instance
+                                # The main_menu will be called after this instance ends.
+                                self.next_action = 'quit'
+                        elif self.mode == "endless":
+                             if btn['label'] == 'RESTART ENDLESS':
+                                 # Restart endless mode with the same song
+                                 self.running = False
+                                 # start_game with endless mode and same song will be called from menu
+                                 self.next_action = 'restart_endless'
+                             elif btn['label'] == 'QUIT':
+                                 self.running = False
+                                 # main_menu will be called from menu
+                        return # Exit event handling after a button is pressed
 
     def draw(self):
-        # If results popup is showing, blit the last frame and return
-        if self.show_results and self.last_frame is not None:
+        # If results popup is showing, blit the last frame and return - only in normal mode
+        if self.mode == "normal" and self.show_results and self.last_frame is not None: # Add mode check
             self.display.blit(self.last_frame, (0, 0))
             return
         # If paused, blit the pause frame and return
@@ -203,15 +295,18 @@ class Game:
         # Clear screen
         self.display.blit(self.background, (0, 0))
 
-        # Draw timer
-        elapsed_sec = (pygame.time.get_ticks() - self.start_ticks) / 1000
-        timer_to_show = self.final_time if self.show_results else elapsed_sec
-        timer_text = self.font.render(f"Time: {timer_to_show:.2f}s", True, (255, 0, 0))
-        self.display.blit(timer_text, (100, 80))
+        # Draw timer - adjust for endless mode?
+        # Removed timer display as requested
+        # elapsed_sec = (pygame.time.get_ticks() - self.start_ticks) / 1000
+        # In endless mode, timer continues. In normal mode, it stops at final_time.
+        # timer_to_show = self.final_time if self.show_results and self.mode == "normal" else elapsed_sec # Adjust timer display
+        # timer_text = self.font.render(f"Time: {timer_to_show:.2f}s", True, (255, 0, 0))
+        # self.display.blit(timer_text, (100, 80))
 
-        # Draw score
+        # Draw score - adjust for endless mode?
+        # Score display is the same for now, but could be different in endless mode
         score_text = self.font.render(f"Score: {self.hit_detector.score}", True, (0, 0, 255))
-        self.display.blit(score_text, (100, 130))
+        self.display.blit(score_text, (100, 80)) # Moved score to the timer's old position
 
         # Draw combo counter
         if self.hit_detector.combo > 0:
@@ -243,8 +338,9 @@ class Game:
             # Store the current game state
             self.pause_time = pygame.time.get_ticks() - self.start_ticks
             # Store current music position
-            self.music_position = pygame.mixer.music.get_pos() / 1000.0
-            pygame.mixer.music.pause()
+            if self.music_started:
+                 self.music_position = pygame.mixer.music.get_pos() / 1000.0
+                 pygame.mixer.music.pause()
             # Capture the current frame for pause background
             self.pause_frame = self.display.copy()
             self.init_pause_popup()
@@ -255,7 +351,8 @@ class Game:
             # Adjust start_ticks to maintain the same elapsed time
             self.start_ticks = pygame.time.get_ticks() - self.pause_time
             # Resume music from stored position
-            pygame.mixer.music.unpause()
+            if self.music_started:
+                 pygame.mixer.music.unpause()
 
     def init_pause_popup(self):
         center_x = WINDOW_WIDTH // 2
@@ -280,16 +377,20 @@ class Game:
         overlay.fill((0,0,0,180))
         self.display.blit(overlay, (0,0))
         # Popup box
-        popup_rect = pygame.Rect(WINDOW_WIDTH//2-250, WINDOW_HEIGHT//2-200, 500, 300)
+        popup_rect = pygame.Rect(WINDOW_WIDTH//2-250, WINDOW_HEIGHT//2-250, 500, 500) # Adjusted position and height
         pygame.draw.rect(self.display, (40,40,40), popup_rect, border_radius=20)
         pygame.draw.rect(self.display, (200,200,200), popup_rect, 4, border_radius=20)
         # Pause text
         pause_text = self.pause_font.render("PAUSED", True, (255,255,0))
-        pause_rect = pause_text.get_rect(center=(WINDOW_WIDTH//2, WINDOW_HEIGHT//2-80))
+        pause_rect = pause_text.get_rect(center=(WINDOW_WIDTH//2, WINDOW_HEIGHT//2-150)) # Adjusted vertical position
         self.display.blit(pause_text, pause_rect)
         # Buttons
         mouse_pos = pygame.mouse.get_pos()
-        for btn in self.pause_buttons:
+        button_y_start = WINDOW_HEIGHT//2 # Adjusted starting position for buttons
+        button_gap = 90 # Keep existing button gap
+        for i, btn in enumerate(self.pause_buttons):
+            # Adjust button vertical position based on the new popup height and arrangement
+            btn['rect'].center = (WINDOW_WIDTH//2, button_y_start + i * button_gap + 50) # Adjust button vertical spacing
             btn['hover'] = btn['rect'].collidepoint(mouse_pos)
             color = (255,0,0) if btn['hover'] else (255,255,255)
             pygame.draw.rect(self.display, color, btn['rect'], border_radius=10, width=3)
@@ -309,19 +410,22 @@ class Game:
                             self.resume_game()
                         elif btn['label'] == 'QUIT':
                             self.running = False
+                            self.next_action = 'quit'
                         return
 
     def run(self):
         clock = pygame.time.Clock()
         
         while self.running:
-            if self.show_results:
+            # Only show results popup in normal mode
+            if self.mode == "normal" and self.show_results: # Add mode check
                 self.handle_results_popup_events()
                 self.draw()
                 self.draw_results_popup()
                 pygame.display.update()
                 clock.tick(FPS)
                 continue
+            # Pause logic applies to both modes
             if self.paused:
                 self.handle_pause_popup_events()
                 self.draw()
@@ -329,8 +433,13 @@ class Game:
                 pygame.display.update()
                 clock.tick(FPS)
                 continue
+            
             self.handle_events()
-            self.update()
+            # Only update game state if not showing results (which won't happen in endless mode anyway)
+            if not self.show_results:
+                self.update()
+            
             self.draw()
             pygame.display.update()
-            clock.tick(FPS) 
+            clock.tick(FPS)
+        return self.next_action # Return the action requested by the user 

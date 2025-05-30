@@ -3,9 +3,10 @@ import pandas as pd
 from game.constants import SPAWN_WINDOW
 from Sprites.tiles import Tiles, spawn_positions
 from game.pattern_manager import PatternManager
+import os
 
 class ArrowSpawner:
-    def __init__(self, arrows):
+    def __init__(self, arrows, songs_data):
         self.spawn_queue = queue.Queue()
         self.timestamp_key_dict = {}
         self.arrows = arrows
@@ -18,14 +19,31 @@ class ArrowSpawner:
         self.pattern_manager = PatternManager()
         self.use_patterns = False  # Flag to determine if we're using patterns or CSV
         self.difficulty = 'easy'  # Default, will be set in pattern mode
+        self.spawning_allowed = True # Flag to control spawning
+        self.songs_data = songs_data # Store the songs data
 
-    def add_timestamps(self):
-        file = pd.read_csv('key_log.csv')
-        for _, row in file.iterrows():
-            ts = round(row['timestamp'], 3)
-            self.spawn_queue.put(ts)
-            # Store keys as a list for each timestamp
-            self.timestamp_key_dict[ts] = row['key'].split(',') if isinstance(row['key'], str) else [row['key']]
+    def add_timestamps(self, song_key):
+        # Get key log file path from SONGS dictionary
+        song_info = self.songs_data.get(song_key)
+        if song_info and "key_log_file" in song_info:
+            key_log_path = os.path.join(song_info["key_log_file"])
+        else:
+            print(f"[ERROR] Key log file not found for song key: {song_key}")
+            return # Stop if key log file not found
+
+        try:
+            file = pd.read_csv(key_log_path)
+            for _, row in file.iterrows():
+                ts = round(row['timestamp'], 3)
+                self.spawn_queue.put(ts)
+                # Store keys as a list for each timestamp
+                self.timestamp_key_dict[ts] = row['key'].split(',') if isinstance(row['key'], str) else [row['key']]
+        except FileNotFoundError:
+            print(f"[ERROR] Key log file not found at: {key_log_path}")
+        except KeyError as e:
+            print(f"[ERROR] Missing column in key log file: {e}")
+        except Exception as e:
+            print(f"[ERROR] Error reading key log file: {e}")
 
     def get_sprite(self, key):
         return self.arrows.get(self.key_to_arrow.get(key))
@@ -35,13 +53,16 @@ class ArrowSpawner:
         self.difficulty = difficulty
         self.pattern_manager.difficulty = difficulty
         # Use key log for timing, but pattern manager for pattern selection
-        self.add_timestamps()
+        # We will call add_timestamps with the song_key from the Game class
 
     def stop_pattern_mode(self):
         if self.use_patterns:
             self.use_patterns = False
 
     def spawn_arrow(self, current_time, arrow_group):
+        if not self.spawning_allowed:
+            return # Do not spawn if spawning is not allowed
+
         if self.use_patterns:
             # Use key log timestamps for timing, but select pattern for each
             if not self.spawn_queue.empty():
