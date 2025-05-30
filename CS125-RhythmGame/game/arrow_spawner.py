@@ -101,6 +101,8 @@ class ArrowSpawner:
             print(f"[ERROR] No song info found for key: {song_key}")
             return
 
+        print(f"[DEBUG] Current difficulty: {self.difficulty}")
+
         # Clear existing timestamps
         self.spawn_queue = queue.Queue()
         self.timestamp_key_dict = {}
@@ -114,6 +116,19 @@ class ArrowSpawner:
         try:
             # Read the CSV file
             df = pd.read_csv(key_log_file)
+            print(f"[DEBUG] Original CSV contents (first 5 rows):\n{df.head()}")
+            
+            # In hard mode, shuffle the keys while keeping timestamps
+            if self.difficulty == 'hard':
+                # Get all keys and shuffle them
+                all_keys = df['key'].tolist()
+                print(f"[DEBUG] Keys before shuffling: {all_keys[:5]}")
+                random.shuffle(all_keys)
+                print(f"[DEBUG] Keys after shuffling: {all_keys[:5]}")
+                # Replace the original keys with shuffled ones
+                df['key'] = all_keys
+                print(f"[DEBUG] Shuffled CSV contents (first 5 rows):\n{df.head()}")
+                print("[DEBUG] CSV keys have been shuffled for hard mode")
             
             # Process each row
             for _, row in df.iterrows():
@@ -138,6 +153,8 @@ class ArrowSpawner:
                     # Add to queues
                     self.spawn_queue.put(timestamp)
                     self.timestamp_key_dict[timestamp] = valid_keys
+                    if self.difficulty == 'hard':
+                        print(f"[DEBUG] Added timestamp {timestamp} with keys {valid_keys}")
             
             print(f"[DEBUG] Loaded {len(df)} timestamps from {key_log_file}")
             
@@ -145,6 +162,8 @@ class ArrowSpawner:
             print(f"[ERROR] Key log file not found: {key_log_file}")
         except Exception as e:
             print(f"[ERROR] Failed to load CSV file: {e}")
+            import traceback
+            print(traceback.format_exc())
 
     def start_pattern_mode(self, difficulty):
         """Start pattern mode with the given difficulty."""

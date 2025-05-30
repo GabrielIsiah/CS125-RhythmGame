@@ -36,6 +36,8 @@ class Game:
         self.hit_detector = HitDetector()
         # Pass the selected song_key and songs_data to the ArrowSpawner
         self.arrow_spawner = ArrowSpawner(arrows, self.songs_data)
+        print(f"[DEBUG] Setting difficulty to: {difficulty}")
+        self.arrow_spawner.difficulty = difficulty  # Set the difficulty in ArrowSpawner
         self.outline_manager = OutlineManager(outlines)
         
         # Set up music
