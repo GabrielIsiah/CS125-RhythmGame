@@ -36,7 +36,6 @@ class Game:
         self.hit_detector = HitDetector()
         # Pass the selected song_key and songs_data to the ArrowSpawner
         self.arrow_spawner = ArrowSpawner(arrows, self.songs_data)
-        print(f"[DEBUG] Setting difficulty to: {difficulty}")
         self.arrow_spawner.difficulty = difficulty  # Set the difficulty in ArrowSpawner
         self.outline_manager = OutlineManager(outlines)
         
@@ -45,9 +44,7 @@ class Game:
         song_info = self.songs_data.get(song_key)
         if song_info and "music_file" in song_info:
             self.music_path = os.path.join(song_info["music_file"])
-            print(f"[DEBUG] Music file path set to: {self.music_path}")
         else:
-            print(f"[ERROR] Music file not found for song key: {song_key}")
             self.music_path = None # Or set a default error sound
             
         self.music_started = False
@@ -107,13 +104,10 @@ class Game:
         if self.difficulty == "medium" or self.difficulty == "hard":
             # Start with normal mode, schedule first gravity switch
             self.gravity_mode = False
-            print(f"[DEBUG] Initializing gravity mode for {self.difficulty} difficulty")
-            print(f"[DEBUG] Starting in normal mode, scheduling first gravity switch")
             self.schedule_next_gravity_switch()
         else:
             # For other difficulties, always use normal mode
             self.gravity_mode = False
-            print(f"[DEBUG] Gravity mode disabled for {self.difficulty} difficulty")
 
         self.outline_manager.add_outlines(self.outline_group, self.gravity_mode)
 
@@ -146,10 +140,8 @@ class Game:
 
         # Start music after delay
         if elapsed_sec >= MUSIC_START_DELAY and not self.music_started:
-            print("[DEBUG] Attempting to play music")
             try:
                 audio_manager.play_music(self.music_path)
-                print("[DEBUG] Music started playing")
                 self.music_started = True
             except Exception as e:
                 print(f"[ERROR] Failed to play music: {e}")
@@ -466,7 +458,6 @@ class Game:
         duration = random.uniform(15.0, 30.0)
         
         self.next_gravity_switch = current_time + (duration * 1000)
-        print(f"[DEBUG] Next gravity switch scheduled in {duration:.1f} seconds")
 
     def check_gravity_switch(self):
         """Check if it's time to switch gravity mode."""
@@ -483,14 +474,12 @@ class Game:
                 self.outline_manager.update_outline_positions(self.outline_group, self.gravity_mode)
                 self.schedule_next_gravity_switch()
                 self.show_countdown = False
-                print(f"[DEBUG] Switching to {'gravity' if self.gravity_mode else 'normal'} mode")
             return
             
         # Check if it's time to start countdown
         if current_time >= self.next_gravity_switch:
             self.show_countdown = True
             self.countdown_start = current_time
-            print("[DEBUG] Starting 5-second countdown before mode switch")
 
     def is_safe_to_switch(self):
         """Always return True since we're using countdown instead of arrow checks."""
