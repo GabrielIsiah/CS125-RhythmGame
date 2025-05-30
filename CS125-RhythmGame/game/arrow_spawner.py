@@ -1,9 +1,11 @@
 import queue
 import pandas as pd
-from game.constants import SPAWN_WINDOW
+from game.constants import SPAWN_WINDOW, WINDOW_WIDTH, WINDOW_HEIGHT, ARROW_SPACING, NORMAL_HIT_ZONE_Y, GRAVITY_HIT_ZONE_Y
 from Sprites.tiles import Tiles, spawn_positions
 from game.pattern_manager import PatternManager
 import os
+import pygame
+import random
 
 class ArrowSpawner:
     def __init__(self, arrows, songs_data):
@@ -21,6 +23,12 @@ class ArrowSpawner:
         self.difficulty = 'easy'  # Default, will be set in pattern mode
         self.spawning_allowed = True # Flag to control spawning
         self.songs_data = songs_data # Store the songs data
+        self.last_spawn_time = 0
+        self.spawn_delay = 1.0  # Base delay between spawns
+        self.pattern_mode = False
+        self.pattern_index = 0
+        self.pattern = []
+        self.timestamps = []
 
     def add_timestamps(self, song_key):
         # Get key log file path from SONGS dictionary
@@ -52,16 +60,15 @@ class ArrowSpawner:
         self.use_patterns = True
         self.difficulty = difficulty
         self.pattern_manager.difficulty = difficulty
-        # Use key log for timing, but pattern manager for pattern selection
-        # We will call add_timestamps with the song_key from the Game class
 
     def stop_pattern_mode(self):
         if self.use_patterns:
             self.use_patterns = False
 
-    def spawn_arrow(self, current_time, arrow_group):
+    def spawn_arrow(self, current_time, arrow_group, gravity_mode=False):
+        """Spawn a new arrow based on the current game mode and time."""
         if not self.spawning_allowed:
-            return # Do not spawn if spawning is not allowed
+            return
 
         if self.use_patterns:
             # Use key log timestamps for timing, but select pattern for each
@@ -77,6 +84,12 @@ class ArrowSpawner:
                             print(f"[ERROR] No sprite found for key: '{key}'")
                             continue
                         tile = Tiles(tile_img, spawn_positions[key], key)
+                        if gravity_mode:
+                            # In gravity mode, start from bottom and move up
+                            tile.rect.bottom = WINDOW_HEIGHT
+                        else:
+                            # In normal mode, start from top and move down
+                            tile.rect.top = 0
                         arrow_group.add(tile)
             return
 
@@ -104,4 +117,17 @@ class ArrowSpawner:
                         continue
 
                     tile = Tiles(tile_img, spawn_positions[key], key)
-                    arrow_group.add(tile) 
+                    if gravity_mode:
+                        # In gravity mode, start from bottom and move up
+                        tile.rect.bottom = WINDOW_HEIGHT
+                    else:
+                        # In normal mode, start from top and move down
+                        tile.rect.top = 0
+                    arrow_group.add(tile)
+
+class Arrow(pygame.sprite.Sprite):
+    def __init__(self, image, key):
+        super().__init__()
+        self.image = image
+        self.rect = self.image.get_rect()
+        self.key = key 

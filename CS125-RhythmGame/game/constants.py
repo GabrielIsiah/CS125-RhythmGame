@@ -27,10 +27,32 @@ BASE_ARROW_SPEED = 9.44
 # Difficulty speed multipliers
 DIFFICULTY_SPEEDS = {
     "easy": BASE_ARROW_SPEED,      # Base speed
-    "medium": BASE_ARROW_SPEED * 1.2,  # 20% faster
+    "medium": BASE_ARROW_SPEED,    # Same speed as easy, only gravity changes
     "hard": BASE_ARROW_SPEED * 1.4   # 40% faster
 }
 
 # Spawn settings
 SPAWN_WINDOW = 1.55
-MUSIC_START_DELAY = 5.0  # seconds 
+MUSIC_START_DELAY = 5.0
+
+# Arrow and outline spacing
+ARROW_SPACING = 200  # Space between arrows horizontally
+OUTLINE_SPACING = 200  # Space between outlines horizontally
+
+# Gravity mode settings (for medium difficulty)
+GRAVITY_MIN_DURATION = 15.0  # Minimum duration of gravity mode in seconds
+GRAVITY_MAX_DURATION = 25.0  # Maximum duration of gravity mode in seconds
+GRAVITY_NORMAL_MIN_DURATION = 20.0  # Minimum duration of normal mode in seconds
+GRAVITY_NORMAL_MAX_DURATION = 30.0  # Maximum duration of normal mode in seconds
+GRAVITY_SAFE_INTERVAL = 2.0  # Minimum time between arrows for safe gravity switch
+
+# UI Positions
+SCORE_POSITION = (50, 50)  # Moved to upper left
+MISS_POSITION = (50, 100)  # Below score
+COMBO_POSITION = (50, 150)  # Below misses
+FEEDBACK_POSITION = (WINDOW_WIDTH // 2, 200)  # Centered horizontally
+
+# Hit zone positions (symmetric relative to screen edges)
+HIT_ZONE_EDGE_DISTANCE = 150  # Distance from screen edge to hit zone
+NORMAL_HIT_ZONE_Y = WINDOW_HEIGHT - HIT_ZONE_EDGE_DISTANCE  # Bottom hit zone (750)
+GRAVITY_HIT_ZONE_Y = HIT_ZONE_EDGE_DISTANCE  # Top hit zone (150) 

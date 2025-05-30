@@ -1,14 +1,20 @@
 import pygame
 import sys
 import os
+import random
 from game.constants import (
     WINDOW_WIDTH, WINDOW_HEIGHT, FPS, DIFFICULTY_SPEEDS,
-    HIT_FEEDBACK_DURATION, MUSIC_START_DELAY
+    HIT_FEEDBACK_DURATION, MUSIC_START_DELAY,
+    GRAVITY_MIN_DURATION, GRAVITY_MAX_DURATION,
+    GRAVITY_NORMAL_MIN_DURATION, GRAVITY_NORMAL_MAX_DURATION,
+    SCORE_POSITION, MISS_POSITION, COMBO_POSITION, FEEDBACK_POSITION,
+    NORMAL_HIT_ZONE_Y, GRAVITY_HIT_ZONE_Y, GRAVITY_SAFE_INTERVAL
 )
 from game.hit_detection import HitDetector
 from game.arrow_spawner import ArrowSpawner
 from game.outline_manager import OutlineManager
 from Utility.font_manager import font_manager
+from Utility.audio_manager import audio_manager
 # SONGS will be passed in from the menu
 # from game.menu import SONGS
 
@@ -37,12 +43,7 @@ class Game:
         song_info = self.songs_data.get(song_key)
         if song_info and "music_file" in song_info:
             self.music_path = os.path.join(song_info["music_file"])
-            print(f"[DEBUG] Attempting to load music from: {self.music_path}")
-            try:
-                pygame.mixer.music.load(self.music_path)
-                print("[DEBUG] Music file loaded successfully")
-            except Exception as e:
-                print(f"[ERROR] Failed to load music file: {e}")
+            print(f"[DEBUG] Music file path set to: {self.music_path}")
         else:
             print(f"[ERROR] Music file not found for song key: {song_key}")
             self.music_path = None # Or set a default error sound
@@ -53,15 +54,15 @@ class Game:
         # Set up display elements
         self.background = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT))
         self.background.fill('White')
-        self.font = font_manager.get_font(48)
-        self.combo_font = font_manager.get_font(72)  # Larger font for combo display
+        self.font = font_manager.get_font(36)  # Smaller font for UI
+        self.combo_font = font_manager.get_font(48)  # Smaller font for combo
         
         # Initialize game state
         self.start_ticks = pygame.time.get_ticks()
         self.running = True
         self.song_key = song_key
         self.difficulty = difficulty
-        self.arrow_speed = DIFFICULTY_SPEEDS.get(difficulty, DIFFICULTY_SPEEDS['easy']) # Use .get with a default for safety
+        self.arrow_speed = DIFFICULTY_SPEEDS.get(difficulty, DIFFICULTY_SPEEDS['easy'])
         self.show_results = False
         self.waiting_for_results = False
         self.song_end_time = None
@@ -76,22 +77,34 @@ class Game:
         self.pause_buttons = []
         self.pause_font = font_manager.get_font(72)
         self.pause_small_font = font_manager.get_font(48)
-        self.mode = mode # Store the game mode
-        self.next_action = None # To store the action requested by the user (e.g., 'restart', 'quit')
+        self.mode = mode
+        self.next_action = None
+
+        # Gravity mode settings (for medium difficulty)
+        self.gravity_mode = False
+        self.gravity_mode_start = 0
+        self.gravity_mode_duration = 0
+        self.next_gravity_switch = 0
         
         # Load game data
-        if song_key == "pattern":  # Use pattern system instead of CSV
+        if song_key == "pattern":
             self.arrow_spawner.start_pattern_mode(difficulty)
         else:
-            # Pass the song_key to add_timestamps for normal mode
             if self.mode == "normal":
-                 self.arrow_spawner.add_timestamps(song_key)
-            # For endless mode, we might need a different spawner logic or continuous pattern generation
-            # For now, we'll still load the timestamps but the game end logic will differ
+                self.arrow_spawner.add_timestamps(song_key)
             else:
-                 self.arrow_spawner.add_timestamps(song_key) # Still load timestamps for basic arrow data
+                self.arrow_spawner.add_timestamps(song_key)
 
-        self.outline_manager.add_outlines(self.outline_group)
+        # Initialize hit zones based on difficulty
+        if self.difficulty == "medium":
+            # Start with normal mode, schedule first gravity switch
+            self.gravity_mode = False
+            self.schedule_next_gravity_switch()
+        else:
+            # For other difficulties, always use normal mode
+            self.gravity_mode = False
+
+        self.outline_manager.add_outlines(self.outline_group, self.gravity_mode)
 
     def handle_events(self):
         for event in pygame.event.get():
@@ -124,12 +137,14 @@ class Game:
         if elapsed_sec >= MUSIC_START_DELAY and not self.music_started:
             print("[DEBUG] Attempting to play music")
             try:
-                pygame.mixer.music.play()
-                pygame.mixer.music.set_volume(0.3)
+                audio_manager.play_music(self.music_path)
                 print("[DEBUG] Music started playing")
                 self.music_started = True
             except Exception as e:
                 print(f"[ERROR] Failed to play music: {e}")
+
+        # Check for gravity mode switch
+        self.check_gravity_switch()
 
         # If results popup is showing, do not update game state
         if self.show_results:
@@ -144,31 +159,37 @@ class Game:
             return
 
         # Detect end of song (music stopped) - only in normal mode
-        if self.mode == "normal": # Add mode check here
+        if self.mode == "normal":
             if self.music_started and not pygame.mixer.music.get_busy() and not self.waiting_for_results and not self.paused:
                 self.final_score = self.hit_detector.score
                 self.final_time = elapsed_sec
                 self.song_end_time = pygame.time.get_ticks()
-                # Capture the last frame
                 self.last_frame = self.display.copy()
                 self.waiting_for_results = True
-                # Clear the arrow group to prevent arrows from showing on the results screen
                 self.arrow_group.empty()
-                # Stop the arrow spawner from generating new arrows
                 self.arrow_spawner.spawning_allowed = False
                 return
 
         # Update arrow positions and check for misses
         for arrow in self.arrow_group:
-            arrow.update(self.arrow_speed)
-            # Check if arrow has passed the hit zone (outline)
+            # Reverse direction in gravity mode
+            speed = -self.arrow_speed if self.gravity_mode else self.arrow_speed
+            arrow.update(speed)
+            
+            # Check if arrow has passed the hit zone
             outline = next((o for o in self.outline_group if o.key == arrow.key), None)
-            if outline and arrow.rect.top > outline.rect.bottom:
-                self.hit_detector.check_miss(arrow)
-                self.arrow_group.remove(arrow)
+            if outline:
+                if self.gravity_mode:
+                    if arrow.rect.bottom < outline.rect.top:
+                        self.hit_detector.check_miss(arrow)
+                        self.arrow_group.remove(arrow)
+                else:
+                    if arrow.rect.top > outline.rect.bottom:
+                        self.hit_detector.check_miss(arrow)
+                        self.arrow_group.remove(arrow)
 
         # Spawn new arrows
-        self.arrow_spawner.spawn_arrow(elapsed_sec, self.arrow_group)
+        self.arrow_spawner.spawn_arrow(elapsed_sec, self.arrow_group, self.gravity_mode)
 
     def init_results_popup(self):
         # Centered popup with score and 3 buttons
@@ -285,7 +306,7 @@ class Game:
 
     def draw(self):
         # If results popup is showing, blit the last frame and return - only in normal mode
-        if self.mode == "normal" and self.show_results and self.last_frame is not None: # Add mode check
+        if self.mode == "normal" and self.show_results and self.last_frame is not None:
             self.display.blit(self.last_frame, (0, 0))
             return
         # If paused, blit the pause frame and return
@@ -295,23 +316,18 @@ class Game:
         # Clear screen
         self.display.blit(self.background, (0, 0))
 
-        # Draw timer - adjust for endless mode?
-        # Removed timer display as requested
-        # elapsed_sec = (pygame.time.get_ticks() - self.start_ticks) / 1000
-        # In endless mode, timer continues. In normal mode, it stops at final_time.
-        # timer_to_show = self.final_time if self.show_results and self.mode == "normal" else elapsed_sec # Adjust timer display
-        # timer_text = self.font.render(f"Time: {timer_to_show:.2f}s", True, (255, 0, 0))
-        # self.display.blit(timer_text, (100, 80))
-
-        # Draw score - adjust for endless mode?
-        # Score display is the same for now, but could be different in endless mode
+        # Draw score
         score_text = self.font.render(f"Score: {self.hit_detector.score}", True, (0, 0, 255))
-        self.display.blit(score_text, (100, 80)) # Moved score to the timer's old position
+        self.display.blit(score_text, SCORE_POSITION)
+
+        # Draw miss counter
+        miss_text = self.font.render(f"Misses: {self.hit_detector.misses}", True, (0, 0, 255))
+        self.display.blit(miss_text, MISS_POSITION)
 
         # Draw combo counter
         if self.hit_detector.combo > 0:
-            combo_text = self.combo_font.render(f"{self.hit_detector.combo} Combo", True, (255, 165, 0))  # Orange color
-            self.display.blit(combo_text, (50, WINDOW_HEIGHT - 100))  # Bottom left position
+            combo_text = self.combo_font.render(f"{self.hit_detector.combo} Combo", True, (255, 165, 0))
+            self.display.blit(combo_text, COMBO_POSITION)
 
         # Draw game elements
         self.outline_group.draw(self.display)
@@ -322,15 +338,15 @@ class Game:
             current_time = pygame.time.get_ticks()
             if current_time - self.hit_detector.hit_feedback_timer < HIT_FEEDBACK_DURATION:
                 feedback_text = self.font.render(self.hit_detector.hit_feedback, True, self.hit_detector.hit_color)
-                # Center the feedback text horizontally and position it near the top
                 feedback_x = (WINDOW_WIDTH - feedback_text.get_width()) // 2
-                self.display.blit(feedback_text, (feedback_x, 200))
+                self.display.blit(feedback_text, (feedback_x, FEEDBACK_POSITION[1]))
 
         pygame.display.update()
 
     def cleanup(self):
         if self.song_key == "pattern":
             self.arrow_spawner.stop_pattern_mode()
+        audio_manager.cleanup()
 
     def pause_game(self):
         if not self.paused:  # Only pause if not already paused
@@ -340,7 +356,7 @@ class Game:
             # Store current music position
             if self.music_started:
                  self.music_position = pygame.mixer.music.get_pos() / 1000.0
-                 pygame.mixer.music.pause()
+                 audio_manager.pause_music()
             # Capture the current frame for pause background
             self.pause_frame = self.display.copy()
             self.init_pause_popup()
@@ -352,7 +368,7 @@ class Game:
             self.start_ticks = pygame.time.get_ticks() - self.pause_time
             # Resume music from stored position
             if self.music_started:
-                 pygame.mixer.music.unpause()
+                 audio_manager.unpause_music()
 
     def init_pause_popup(self):
         center_x = WINDOW_WIDTH // 2
@@ -412,6 +428,53 @@ class Game:
                             self.running = False
                             self.next_action = 'quit'
                         return
+
+    def schedule_next_gravity_switch(self):
+        """Schedule the next gravity mode switch."""
+        if self.gravity_mode:
+            # Schedule return to normal mode
+            duration = random.uniform(GRAVITY_NORMAL_MIN_DURATION, GRAVITY_NORMAL_MAX_DURATION)
+        else:
+            # Schedule switch to gravity mode
+            duration = random.uniform(GRAVITY_MIN_DURATION, GRAVITY_MAX_DURATION)
+        
+        self.next_gravity_switch = pygame.time.get_ticks() + (duration * 1000)
+
+    def check_gravity_switch(self):
+        """Check if it's time to switch gravity mode."""
+        if self.difficulty == "medium" and pygame.time.get_ticks() >= self.next_gravity_switch:
+            # Check if there's a safe interval to switch
+            if self.is_safe_to_switch():
+                self.gravity_mode = not self.gravity_mode
+                self.outline_manager.update_outline_positions(self.outline_group, self.gravity_mode)
+                self.schedule_next_gravity_switch()
+                print(f"Switching to {'gravity' if self.gravity_mode else 'normal'} mode")
+            else:
+                # If not safe, schedule another check soon
+                self.next_gravity_switch = pygame.time.get_ticks() + 1000  # Check again in 1 second
+
+    def is_safe_to_switch(self):
+        """Check if it's safe to switch gravity mode (no arrows, or 1-2 arrows in the absolute center)."""
+        current_time = (pygame.time.get_ticks() - self.start_ticks) / 1000.0
+        
+        # Check if there are any arrows in the spawn queue that would appear soon
+        if not self.arrow_spawner.spawn_queue.empty():
+            next_spawn = self.arrow_spawner.spawn_queue.queue[0]
+            if abs(next_spawn - current_time) < GRAVITY_SAFE_INTERVAL:
+                return False
+        
+        arrows = list(self.arrow_group)
+        if len(arrows) == 0:
+            return True
+        elif len(arrows) <= 2:
+            center_y = self.display.get_height() // 2
+            center_band = 50  # pixels above and below center
+            for arrow in arrows:
+                if not (center_y - center_band <= arrow.rect.centery <= center_y + center_band):
+                    return False
+            return True
+        else:
+            return False
 
     def run(self):
         clock = pygame.time.Clock()
