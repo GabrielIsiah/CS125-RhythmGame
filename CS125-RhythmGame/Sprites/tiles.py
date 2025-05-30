@@ -1,4 +1,5 @@
 import pygame
+from game.constants import WINDOW_HEIGHT
 
 
 class Tiles(pygame.sprite.Sprite):
@@ -17,13 +18,13 @@ class Tiles(pygame.sprite.Sprite):
     def update(self, speed):
         self.rect.y += speed
         self.hitbox.center = self.rect.center  # Update hitbox position with arrow
-        if self.rect.y > 900:
+        if self.rect.y > WINDOW_HEIGHT:
             self.kill()
 
 
 spawn_positions = {
-    'd': (270, -100),
-    'f': (540, -100),
-    'j': (810, -100),
-    'k': (1080, -100)
+    'd': (270, -400),  # Start much further off-screen
+    'f': (540, -400),
+    'j': (810, -400),
+    'k': (1080, -400)
 }
