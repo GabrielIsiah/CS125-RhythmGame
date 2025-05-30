@@ -36,7 +36,7 @@ SONGS = {
     "song2": {
         "title": "Untitled Song 2",
         "artist": "Unknown Artist",
-        "music_file": "", # Placeholder for Song 2 music file
+        "music_file": "assets/songs/Song 1/audio/song2.mp3", # Placeholder for Song 2 music file
         "key_log_file": "", # Placeholder for Song 2 key log file
         "difficulty": {
             "easy": {"bpm": 120},

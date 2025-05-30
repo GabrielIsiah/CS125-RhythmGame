@@ -24,11 +24,11 @@ HIT_FEEDBACK_DURATION = 500  # milliseconds
 # At 60 FPS: 566.67/60 ≈ 9.44 pixels per frame
 BASE_ARROW_SPEED = 9.44
 
-# Difficulty speed multipliers
+# All difficulties use the same speed
 DIFFICULTY_SPEEDS = {
-    "easy": BASE_ARROW_SPEED,      # Base speed
-    "medium": BASE_ARROW_SPEED,    # Same speed as easy, only gravity changes
-    "hard": BASE_ARROW_SPEED * 1.4   # 40% faster
+    "easy": BASE_ARROW_SPEED,      
+    "medium": BASE_ARROW_SPEED,    
+    "hard": BASE_ARROW_SPEED 
 }
 
 # Spawn settings

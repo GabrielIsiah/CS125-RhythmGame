@@ -86,6 +86,12 @@ class Game:
         self.gravity_mode_duration = 0
         self.next_gravity_switch = 0
         
+        # Add countdown variables
+        self.show_countdown = False
+        self.countdown_start = 0
+        self.countdown_duration = 5000  # 5 seconds in milliseconds
+        self.countdown_font = font_manager.get_font(72)  # Larger font for countdown
+        
         # Load game data
         if song_key == "pattern":
             self.arrow_spawner.start_pattern_mode(difficulty)
@@ -96,13 +102,16 @@ class Game:
                 self.arrow_spawner.add_timestamps(song_key)
 
         # Initialize hit zones based on difficulty
-        if self.difficulty == "medium":
+        if self.difficulty == "medium" or self.difficulty == "hard":
             # Start with normal mode, schedule first gravity switch
             self.gravity_mode = False
+            print(f"[DEBUG] Initializing gravity mode for {self.difficulty} difficulty")
+            print(f"[DEBUG] Starting in normal mode, scheduling first gravity switch")
             self.schedule_next_gravity_switch()
         else:
             # For other difficulties, always use normal mode
             self.gravity_mode = False
+            print(f"[DEBUG] Gravity mode disabled for {self.difficulty} difficulty")
 
         self.outline_manager.add_outlines(self.outline_group, self.gravity_mode)
 
@@ -171,7 +180,7 @@ class Game:
                 return
 
         # Update arrow positions and check for misses
-        for arrow in self.arrow_group:
+        for arrow in list(self.arrow_group.sprites()):  # Create a copy of the sprite list
             # Reverse direction in gravity mode
             speed = -self.arrow_speed if self.gravity_mode else self.arrow_speed
             arrow.update(speed)
@@ -182,11 +191,11 @@ class Game:
                 if self.gravity_mode:
                     if arrow.rect.bottom < outline.rect.top:
                         self.hit_detector.check_miss(arrow)
-                        self.arrow_group.remove(arrow)
+                        arrow.kill()  # This will remove the sprite from all groups
                 else:
                     if arrow.rect.top > outline.rect.bottom:
                         self.hit_detector.check_miss(arrow)
-                        self.arrow_group.remove(arrow)
+                        arrow.kill()  # This will remove the sprite from all groups
 
         # Spawn new arrows
         self.arrow_spawner.spawn_arrow(elapsed_sec, self.arrow_group, self.gravity_mode)
@@ -341,6 +350,24 @@ class Game:
                 feedback_x = (WINDOW_WIDTH - feedback_text.get_width()) // 2
                 self.display.blit(feedback_text, (feedback_x, FEEDBACK_POSITION[1]))
 
+        # Draw countdown if active
+        if self.show_countdown:
+            current_time = pygame.time.get_ticks()
+            time_left = (self.countdown_duration - (current_time - self.countdown_start)) / 1000
+            if time_left > 0:
+                # Draw countdown in top center of screen
+                countdown_text = self.countdown_font.render(f"{int(time_left) + 1}", True, (255, 255, 0))
+                countdown_rect = countdown_text.get_rect(center=(WINDOW_WIDTH // 2, 50))
+                
+                # Draw semi-transparent background for countdown
+                countdown_bg = pygame.Surface((countdown_rect.width + 20, countdown_rect.height + 20), pygame.SRCALPHA)
+                countdown_bg.fill((0, 0, 0, 128))
+                self.display.blit(countdown_bg, (countdown_rect.centerx - countdown_bg.get_width() // 2, 
+                                               countdown_rect.centery - countdown_bg.get_height() // 2))
+                
+                # Draw countdown text
+                self.display.blit(countdown_text, countdown_rect)
+
         pygame.display.update()
 
     def cleanup(self):
@@ -431,50 +458,41 @@ class Game:
 
     def schedule_next_gravity_switch(self):
         """Schedule the next gravity mode switch."""
-        if self.gravity_mode:
-            # Schedule return to normal mode
-            duration = random.uniform(GRAVITY_NORMAL_MIN_DURATION, GRAVITY_NORMAL_MAX_DURATION)
-        else:
-            # Schedule switch to gravity mode
-            duration = random.uniform(GRAVITY_MIN_DURATION, GRAVITY_MAX_DURATION)
+        current_time = pygame.time.get_ticks()
         
-        self.next_gravity_switch = pygame.time.get_ticks() + (duration * 1000)
+        # Random duration between 15-30 seconds
+        duration = random.uniform(15.0, 30.0)
+        
+        self.next_gravity_switch = current_time + (duration * 1000)
+        print(f"[DEBUG] Next gravity switch scheduled in {duration:.1f} seconds")
 
     def check_gravity_switch(self):
         """Check if it's time to switch gravity mode."""
-        if self.difficulty == "medium" and pygame.time.get_ticks() >= self.next_gravity_switch:
-            # Check if there's a safe interval to switch
-            if self.is_safe_to_switch():
+        if not (self.difficulty == "medium" or self.difficulty == "hard"):
+            return
+            
+        current_time = pygame.time.get_ticks()
+        
+        # If countdown is active, check if it's time to switch
+        if self.show_countdown:
+            if current_time - self.countdown_start >= self.countdown_duration:
+                # Switch modes
                 self.gravity_mode = not self.gravity_mode
                 self.outline_manager.update_outline_positions(self.outline_group, self.gravity_mode)
                 self.schedule_next_gravity_switch()
-                print(f"Switching to {'gravity' if self.gravity_mode else 'normal'} mode")
-            else:
-                # If not safe, schedule another check soon
-                self.next_gravity_switch = pygame.time.get_ticks() + 1000  # Check again in 1 second
+                self.show_countdown = False
+                print(f"[DEBUG] Switching to {'gravity' if self.gravity_mode else 'normal'} mode")
+            return
+            
+        # Check if it's time to start countdown
+        if current_time >= self.next_gravity_switch:
+            self.show_countdown = True
+            self.countdown_start = current_time
+            print("[DEBUG] Starting 5-second countdown before mode switch")
 
     def is_safe_to_switch(self):
-        """Check if it's safe to switch gravity mode (no arrows, or 1-2 arrows in the absolute center)."""
-        current_time = (pygame.time.get_ticks() - self.start_ticks) / 1000.0
-        
-        # Check if there are any arrows in the spawn queue that would appear soon
-        if not self.arrow_spawner.spawn_queue.empty():
-            next_spawn = self.arrow_spawner.spawn_queue.queue[0]
-            if abs(next_spawn - current_time) < GRAVITY_SAFE_INTERVAL:
-                return False
-        
-        arrows = list(self.arrow_group)
-        if len(arrows) == 0:
-            return True
-        elif len(arrows) <= 2:
-            center_y = self.display.get_height() // 2
-            center_band = 50  # pixels above and below center
-            for arrow in arrows:
-                if not (center_y - center_band <= arrow.rect.centery <= center_y + center_band):
-                    return False
-            return True
-        else:
-            return False
+        """Always return True since we're using countdown instead of arrow checks."""
+        return True
 
     def run(self):
         clock = pygame.time.Clock()

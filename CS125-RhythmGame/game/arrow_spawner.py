@@ -30,40 +30,12 @@ class ArrowSpawner:
         self.pattern = []
         self.timestamps = []
 
-    def add_timestamps(self, song_key):
-        # Get key log file path from SONGS dictionary
-        song_info = self.songs_data.get(song_key)
-        if song_info and "key_log_file" in song_info:
-            key_log_path = os.path.join(song_info["key_log_file"])
-        else:
-            print(f"[ERROR] Key log file not found for song key: {song_key}")
-            return # Stop if key log file not found
-
-        try:
-            file = pd.read_csv(key_log_path)
-            for _, row in file.iterrows():
-                ts = round(row['timestamp'], 3)
-                self.spawn_queue.put(ts)
-                # Store keys as a list for each timestamp
-                self.timestamp_key_dict[ts] = row['key'].split(',') if isinstance(row['key'], str) else [row['key']]
-        except FileNotFoundError:
-            print(f"[ERROR] Key log file not found at: {key_log_path}")
-        except KeyError as e:
-            print(f"[ERROR] Missing column in key log file: {e}")
-        except Exception as e:
-            print(f"[ERROR] Error reading key log file: {e}")
-
     def get_sprite(self, key):
-        return self.arrows.get(self.key_to_arrow.get(key))
-
-    def start_pattern_mode(self, difficulty):
-        self.use_patterns = True
-        self.difficulty = difficulty
-        self.pattern_manager.difficulty = difficulty
-
-    def stop_pattern_mode(self):
-        if self.use_patterns:
-            self.use_patterns = False
+        """Get the sprite for a given key."""
+        arrow_key = self.key_to_arrow.get(key)
+        if arrow_key:
+            return self.arrows.get(arrow_key)
+        return None
 
     def spawn_arrow(self, current_time, arrow_group, gravity_mode=False):
         """Spawn a new arrow based on the current game mode and time."""
@@ -85,37 +57,110 @@ class ArrowSpawner:
                             continue
                         tile = Tiles(tile_img, spawn_positions[key], key)
                         if gravity_mode:
+                            # In gravity mode, spawn at the bottom of the screen
                             tile.rect.bottom = WINDOW_HEIGHT + 100
+                        else:
+                            # In normal mode, spawn at the top of the screen
+                            tile.rect.top = -100
                         arrow_group.add(tile)
             return
 
-        # Original CSV-based spawning logic
+        # Normal mode (using CSV timestamps)
         if not self.spawn_queue.empty():
             item = self.spawn_queue.queue[0]
             if 0 <= item - current_time <= SPAWN_WINDOW:
                 timestamp = round(self.spawn_queue.get(), 3)
-                keys = self.timestamp_key_dict.get(timestamp)
-
-                if not keys:
-                    print(f"[ERROR] No keys found for timestamp: {timestamp}")
-                    return
-
-                # Process each key in the list
+                keys = self.timestamp_key_dict.get(timestamp, [])
+                
+                # Handle both single key and list of keys
+                if isinstance(keys, str):
+                    keys = [keys]
+                
                 for key in keys:
-                    key = key.strip()  # Remove any whitespace
-                    if key not in spawn_positions:
-                        print(f"[ERROR] No spawn position for key: '{key}'")
+                    if not key:
                         continue
-
+                        
                     tile_img = self.get_sprite(key)
                     if tile_img is None:
                         print(f"[ERROR] No sprite found for key: '{key}'")
                         continue
-
+                        
                     tile = Tiles(tile_img, spawn_positions[key], key)
                     if gravity_mode:
+                        # In gravity mode, spawn at the bottom of the screen
                         tile.rect.bottom = WINDOW_HEIGHT + 100
+                    else:
+                        # In normal mode, spawn at the top of the screen
+                        tile.rect.top = -100
                     arrow_group.add(tile)
+
+    def add_timestamps(self, song_key):
+        """Add timestamps from the song's CSV file."""
+        song_info = self.songs_data.get(song_key)
+        if not song_info:
+            print(f"[ERROR] No song info found for key: {song_key}")
+            return
+
+        # Clear existing timestamps
+        self.spawn_queue = queue.Queue()
+        self.timestamp_key_dict = {}
+
+        # Get the key log file path
+        key_log_file = song_info.get("key_log_file")
+        if not key_log_file:
+            print(f"[ERROR] No key log file specified for song: {song_key}")
+            return
+
+        try:
+            # Read the CSV file
+            df = pd.read_csv(key_log_file)
+            
+            # Process each row
+            for _, row in df.iterrows():
+                timestamp = round(float(row['timestamp']), 3)
+                keys = str(row['key']).strip()  # Convert to string and remove whitespace
+                
+                # Split keys if multiple are present (comma-separated)
+                if ',' in keys:
+                    keys = [k.strip() for k in keys.split(',')]
+                else:
+                    keys = [keys]
+                
+                # Validate all keys
+                valid_keys = []
+                for key in keys:
+                    if key in self.key_to_arrow:
+                        valid_keys.append(key)
+                    else:
+                        print(f"[WARNING] Invalid key '{key}' found in CSV, skipping")
+                
+                if valid_keys:
+                    # Add to queues
+                    self.spawn_queue.put(timestamp)
+                    self.timestamp_key_dict[timestamp] = valid_keys
+            
+            print(f"[DEBUG] Loaded {len(df)} timestamps from {key_log_file}")
+            
+        except FileNotFoundError:
+            print(f"[ERROR] Key log file not found: {key_log_file}")
+        except Exception as e:
+            print(f"[ERROR] Failed to load CSV file: {e}")
+
+    def start_pattern_mode(self, difficulty):
+        """Start pattern mode with the given difficulty."""
+        self.use_patterns = True
+        self.difficulty = difficulty
+        self.pattern_mode = True
+        self.pattern_index = 0
+        self.pattern = []
+        self.spawn_queue = queue.Queue()
+        self.timestamp_key_dict = {}
+        
+        # Generate initial timestamps for pattern mode
+        current_time = 0
+        while current_time < 300:  # 5 minutes of patterns
+            self.spawn_queue.put(current_time)
+            current_time += random.uniform(0.5, 1.5)  # Random interval between patterns
 
 class Arrow(pygame.sprite.Sprite):
     def __init__(self, image, key):
