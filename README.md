@@ -12,13 +12,3 @@
 └── README.md             # Project documentation
 ```
 
-## Setup
-1. Create a virtual environment (recommended)
-2. Install dependencies:
-   ```
-   pip install -r requirements.txt
-   ```
-3. Run the game (once implemented):
-   ```
-   python src/main.py
-   ``` 
