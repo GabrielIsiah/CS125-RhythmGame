@@ -85,9 +85,7 @@ class ArrowSpawner:
                             continue
                         tile = Tiles(tile_img, spawn_positions[key], key)
                         if gravity_mode:
-                            tile.rect.bottom = WINDOW_HEIGHT + 400
-                        else:
-                            tile.rect.top = -400
+                            tile.rect.bottom = WINDOW_HEIGHT + 100
                         arrow_group.add(tile)
             return
 
@@ -116,9 +114,7 @@ class ArrowSpawner:
 
                     tile = Tiles(tile_img, spawn_positions[key], key)
                     if gravity_mode:
-                        tile.rect.bottom = WINDOW_HEIGHT + 400
-                    else:
-                        tile.rect.top = -400
+                        tile.rect.bottom = WINDOW_HEIGHT + 100
                     arrow_group.add(tile)
 
 class Arrow(pygame.sprite.Sprite):

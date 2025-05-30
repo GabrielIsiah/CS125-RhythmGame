@@ -23,8 +23,8 @@ class Tiles(pygame.sprite.Sprite):
 
 
 spawn_positions = {
-    'd': (270, -400),  # Start much further off-screen
-    'f': (540, -400),
-    'j': (810, -400),
-    'k': (1080, -400)
+    'd': (270, -100),  # Start off-screen
+    'f': (540, -100),
+    'j': (810, -100),
+    'k': (1080, -100)
 }
