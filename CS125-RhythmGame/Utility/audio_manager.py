@@ -12,12 +12,21 @@ class AudioManager:
         # Create a queue for sound effects
         self.sound_queue = Queue()
         
+        # Set default volumes
+        self.sound_volume = 0.3  # 30% volume for sound effects
+        self.music_volume = 0.3  # 30% volume for music (reverted to original)
+        
         # Load sound effects
         self.sounds = {
             'perfect': self._load_sound('perfect.wav'),
             'good': self._load_sound('good.wav'),
             'miss': self._load_sound('miss.wav')
         }
+        
+        # Set volume for all sound effects
+        for sound in self.sounds.values():
+            if sound:
+                sound.set_volume(self.sound_volume)
         
         # Start the sound effect thread
         self.running = True
@@ -29,7 +38,9 @@ class AudioManager:
         """Load a sound effect from the assets/sounds directory."""
         try:
             sound_path = os.path.join('assets', 'sounds', filename)
-            return pygame.mixer.Sound(sound_path)
+            sound = pygame.mixer.Sound(sound_path)
+            sound.set_volume(self.sound_volume)
+            return sound
         except Exception as e:
             print(f"Error loading sound {filename}: {e}")
             return None
@@ -49,11 +60,11 @@ class AudioManager:
         if sound_name in self.sounds:
             self.sound_queue.put(sound_name)
     
-    def play_music(self, music_path, volume=0.3):
+    def play_music(self, music_path, volume=None):
         """Play background music."""
         try:
             pygame.mixer.music.load(music_path)
-            pygame.mixer.music.set_volume(volume)
+            pygame.mixer.music.set_volume(volume if volume is not None else self.music_volume)
             pygame.mixer.music.play()
         except Exception as e:
             print(f"Error playing music: {e}")
