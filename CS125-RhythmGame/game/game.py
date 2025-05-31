@@ -54,7 +54,7 @@ class Game:
         
         # Set up display elements
         self.background = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT))
-        self.background.fill('White')
+        self.background.fill('Black')
         self.font = font_manager.get_font(36)  # Smaller font for UI
         self.combo_font = font_manager.get_font(48)  # Smaller font for combo
         
@@ -82,7 +82,7 @@ class Game:
         self.next_action = None
 
         # Load background video
-        video_path = os.path.join('assets', 'vids', 'song.mp4')
+        video_path = os.path.join('assets', 'vids', f'song{song_key[-1]}.mp4')  # Use song number for video
         try:
             self.background_video = Video(video_path)
             # Optionally resize the video to fit the screen

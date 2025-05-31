@@ -25,7 +25,7 @@ SONGS = {
     "song1": {
         "title": "Realize (Re:Zero Opening 2)",
         "artist": "Konomi Suzuki",
-        "music_file": "assets/songs/Song 1/audio/song.mp3",
+        "music_file": "assets/songs/Song 1/audio/song1.mp3",
         "key_log_file": "assets/songs/Song 1/key_log.csv",
         "difficulty": {
             "easy": {"bpm": 120},
@@ -36,8 +36,8 @@ SONGS = {
     "song2": {
         "title": "Untitled Song 2",
         "artist": "Unknown Artist",
-        "music_file": "assets/songs/Song 1/audio/song2.mp3", # Placeholder for Song 2 music file
-        "key_log_file": "", # Placeholder for Song 2 key log file
+        "music_file": "assets/songs/Song 2/audio/song2.mp3",
+        "key_log_file": "assets/songs/Song 2/key_log.csv",
         "difficulty": {
             "easy": {"bpm": 120},
             "medium": {"bpm": 140},
@@ -47,8 +47,8 @@ SONGS = {
     "song3": {
         "title": "Untitled Song 3",
         "artist": "Unknown Artist",
-        "music_file": "", # Placeholder for Song 3 music file
-        "key_log_file": "", # Placeholder for Song 3 key log file
+        "music_file": "assets/songs/Song 3/audio/song3.mp3",
+        "key_log_file": "assets/songs/Song 3/key_log.csv",
         "difficulty": {
             "easy": {"bpm": 120},
             "medium": {"bpm": 140},
