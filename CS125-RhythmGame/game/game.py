@@ -8,13 +8,15 @@ from game.constants import (
     GRAVITY_MIN_DURATION, GRAVITY_MAX_DURATION,
     GRAVITY_NORMAL_MIN_DURATION, GRAVITY_NORMAL_MAX_DURATION,
     SCORE_POSITION, MISS_POSITION, COMBO_POSITION, FEEDBACK_POSITION,
-    NORMAL_HIT_ZONE_Y, GRAVITY_HIT_ZONE_Y, GRAVITY_SAFE_INTERVAL
+    NORMAL_HIT_ZONE_Y, GRAVITY_HIT_ZONE_Y, GRAVITY_SAFE_INTERVAL,
+    VIDEO_START_DELAY
 )
 from game.hit_detection import HitDetector
 from game.arrow_spawner import ArrowSpawner
 from game.outline_manager import OutlineManager
 from Utility.font_manager import font_manager
 from Utility.audio_manager import audio_manager
+from game.pyvidplayer import Video
 # SONGS will be passed in from the menu
 # from game.menu import SONGS
 
@@ -78,6 +80,18 @@ class Game:
         self.pause_small_font = font_manager.get_font(48)
         self.mode = mode
         self.next_action = None
+
+        # Load background video
+        video_path = os.path.join('assets', 'vids', 'song.mp4')
+        try:
+            self.background_video = Video(video_path)
+            # Optionally resize the video to fit the screen
+            self.background_video.set_size((WINDOW_WIDTH, WINDOW_HEIGHT))
+            # Pause the video immediately
+            self.background_video.toggle_pause()
+        except FileNotFoundError:
+            print(f"[WARNING] Background video not found at {video_path}")
+            self.background_video = None
 
         # Gravity mode settings (for medium difficulty)
         self.gravity_mode = False
@@ -145,6 +159,14 @@ class Game:
                 self.music_started = True
             except Exception as e:
                 print(f"[ERROR] Failed to play music: {e}")
+
+        # Unpause video after delay if it's paused
+        if self.background_video and self.background_video.get_playback_data()['paused'] and elapsed_sec >= VIDEO_START_DELAY:
+             self.background_video.toggle_pause()
+
+        # Update video frames if game is running and video is active
+        if not self.paused and not self.show_results and self.background_video and self.background_video.active:
+             self.background_video.update()
 
         # Check for gravity mode switch
         self.check_gravity_switch()
@@ -316,8 +338,20 @@ class Game:
         if self.paused and self.pause_frame is not None:
             self.display.blit(self.pause_frame, (0, 0))
             return
-        # Clear screen
-        self.display.blit(self.background, (0, 0))
+
+        # Get elapsed time
+        elapsed_ms = pygame.time.get_ticks() - self.start_ticks
+        elapsed_sec = elapsed_ms / 1000
+
+        # Draw background video if not paused or showing results and after delay
+        if not self.paused and not self.show_results and self.background_video and elapsed_sec >= VIDEO_START_DELAY:
+            self.background_video.draw(self.display, (0, 0))
+        elif not self.paused and not self.show_results and elapsed_sec < VIDEO_START_DELAY:
+            # Draw black background before video starts
+            self.display.fill((0, 0, 0)) # Fill with black
+        else:
+            # Clear screen with background color if no video or paused/results
+            self.display.blit(self.background, (0, 0))
 
         # Draw score
         score_text = self.font.render(f"Score: {self.hit_detector.score}", True, (0, 0, 255))
@@ -368,6 +402,9 @@ class Game:
         if self.song_key == "pattern":
             self.arrow_spawner.stop_pattern_mode()
         audio_manager.cleanup()
+        # Close the video player
+        if self.background_video:
+            self.background_video.close()
 
     def pause_game(self):
         if not self.paused:  # Only pause if not already paused
@@ -402,8 +439,13 @@ class Game:
                 'hover': False
             },
             {
-                'label': 'QUIT',
+                'label': 'RETRY',
                 'rect': pygame.Rect(center_x-150, center_y+40+button_gap, 300, 70),
+                'hover': False
+            },
+            {
+                'label': 'QUIT',
+                'rect': pygame.Rect(center_x-150, center_y+40+2*button_gap, 300, 70),
                 'hover': False
             }
         ]
@@ -423,11 +465,11 @@ class Game:
         self.display.blit(pause_text, pause_rect)
         # Buttons
         mouse_pos = pygame.mouse.get_pos()
-        button_y_start = WINDOW_HEIGHT//2 # Adjusted starting position for buttons
+        button_y_start = WINDOW_HEIGHT//2 - 40 # Adjusted starting position for buttons
         button_gap = 90 # Keep existing button gap
         for i, btn in enumerate(self.pause_buttons):
             # Adjust button vertical position based on the new popup height and arrangement
-            btn['rect'].center = (WINDOW_WIDTH//2, button_y_start + i * button_gap + 50) # Adjust button vertical spacing
+            btn['rect'].center = (WINDOW_WIDTH//2, button_y_start + i * button_gap) # Adjust button vertical spacing
             btn['hover'] = btn['rect'].collidepoint(mouse_pos)
             color = (255,0,0) if btn['hover'] else (255,255,255)
             pygame.draw.rect(self.display, color, btn['rect'], border_radius=10, width=3)
@@ -445,6 +487,9 @@ class Game:
                     if btn['hover']:
                         if btn['label'] == 'RESUME':
                             self.resume_game()
+                        elif btn['label'] == 'RETRY':
+                            self.running = False
+                            self.next_action = 'restart'
                         elif btn['label'] == 'QUIT':
                             self.running = False
                             self.next_action = 'quit'

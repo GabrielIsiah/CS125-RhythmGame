@@ -34,6 +34,7 @@ DIFFICULTY_SPEEDS = {
 # Spawn settings
 SPAWN_WINDOW = 1.55
 MUSIC_START_DELAY = 5.0
+VIDEO_START_DELAY = 4.4
 
 # Arrow and outline spacing
 ARROW_SPACING = 200  # Space between arrows horizontally
