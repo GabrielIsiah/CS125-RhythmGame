@@ -131,11 +131,3 @@ pip install -r requirements.txt
 4. **Font Issues**:
    - Make sure the font file is in the correct location (`assets/fonts/Grand9k Pixel.ttf`)
    - If the font is missing, the game will fall back to the system font
-
-## Contributing
-
-Feel free to submit issues and enhancement requests!
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
