@@ -401,12 +401,38 @@ class Game:
         pygame.display.update()
 
     def cleanup(self):
+        """Clean up all game resources."""
+        # Stop pattern mode if active
         if self.song_key == "pattern":
             self.arrow_spawner.stop_pattern_mode()
-        audio_manager.cleanup()
-        # Close the video player
+        
+        # Stop music but don't quit the mixer
+        if self.music_started:
+            pygame.mixer.music.stop()
+            self.music_started = False
+        
+        # Clean up video resources
         if self.background_video:
             self.background_video.close()
+            self.background_video = None
+        
+        # Clear sprite groups
+        self.arrow_group.empty()
+        self.outline_group.empty()
+        
+        # Clear any stored frames
+        self.last_frame = None
+        self.pause_frame = None
+        
+        # Reset game state
+        self.running = False
+        self.show_results = False
+        self.waiting_for_results = False
+        self.paused = False
+        
+        # Force garbage collection
+        import gc
+        gc.collect()
 
     def pause_game(self):
         if not self.paused:  # Only pause if not already paused
@@ -414,9 +440,9 @@ class Game:
             # Store the current game state
             self.pause_time = pygame.time.get_ticks() - self.start_ticks
             # Store current music position
-            if self.music_started:
-                 self.music_position = pygame.mixer.music.get_pos() / 1000.0
-                 audio_manager.pause_music()
+            if self.music_started and pygame.mixer.music.get_busy():
+                self.music_position = pygame.mixer.music.get_pos() / 1000.0
+                audio_manager.pause_music()
             # Capture the current frame for pause background
             self.pause_frame = self.display.copy()
             self.init_pause_popup()
@@ -428,7 +454,11 @@ class Game:
             self.start_ticks = pygame.time.get_ticks() - self.pause_time
             # Resume music from stored position
             if self.music_started:
-                 audio_manager.unpause_music()
+                try:
+                    audio_manager.unpause_music()
+                except:
+                    # If unpause fails, try to restart the music
+                    audio_manager.play_music(self.music_path)
 
     def init_pause_popup(self):
         center_x = WINDOW_WIDTH // 2

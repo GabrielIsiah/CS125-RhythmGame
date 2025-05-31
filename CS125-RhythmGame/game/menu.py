@@ -192,12 +192,21 @@ class Button:
 
 def start_game(song_key, difficulty, mode="normal"):
     """Start the rhythm game with selected song, difficulty, and mode."""
+    # Initialize pygame mixer if not already initialized
+    if not pygame.mixer.get_init():
+        pygame.mixer.init()
+        
     game = Game(outlines, arrows, SONGS, song_key, difficulty, mode)
     next_action = game.run()
+    
+    # Clean up resources before any navigation
+    game.cleanup()
     
     # After game ends, navigate based on the returned action
     if mode == "normal":
         if next_action == 'restart':
+            # Small delay to ensure resources are properly cleaned up
+            pygame.time.wait(100)
             start_game(song_key, difficulty, mode) # Restart the same game
         elif next_action == 'difficulty_select':
             pattern_selection(song_key) # Go back to difficulty selection for the same song
@@ -205,6 +214,8 @@ def start_game(song_key, difficulty, mode="normal"):
             main_menu() # Go back to the main menu
     elif mode == "endless":
         if next_action == 'restart_endless':
+            # Small delay to ensure resources are properly cleaned up
+            pygame.time.wait(100)
             start_game(song_key, difficulty, mode) # Restart endless mode with same song
         else: # Covers 'quit' or None (window close)
             main_menu() # Go back to the main menu
