@@ -9,6 +9,7 @@ from errno import ENOENT
 class Video:
     def __init__(self, path):
         self.path = path
+        self.transparency = 128  # Default transparency (0-255, where 0 is fully transparent)
         
         if exists(path):
             self.video = MediaPlayer(path)
@@ -81,7 +82,18 @@ class Video:
                 self.image = pygame.image.frombuffer(frame[0].to_bytearray()[0], frame[0].get_size(), "RGB")
         return updated
         
+    def set_transparency(self, value):
+        """Set the transparency level of the video (0-255, where 0 is fully transparent)"""
+        self.transparency = max(0, min(255, value))
+        
     def draw(self, surf, pos, force_draw=True):
         if self.active:
             if self.update() or force_draw:
-                surf.blit(self.image, pos)
+                # Create a temporary surface with alpha channel
+                temp_surface = pygame.Surface(self.image.get_size(), pygame.SRCALPHA)
+                # Blit the video frame onto the temporary surface
+                temp_surface.blit(self.image, (0, 0))
+                # Set the alpha value for the entire surface
+                temp_surface.set_alpha(self.transparency)
+                # Blit the semi-transparent surface onto the main surface
+                surf.blit(temp_surface, pos)

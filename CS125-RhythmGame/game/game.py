@@ -87,6 +87,8 @@ class Game:
             self.background_video = Video(video_path)
             # Optionally resize the video to fit the screen
             self.background_video.set_size((WINDOW_WIDTH, WINDOW_HEIGHT))
+            # Set video transparency to 40% opacity
+            self.background_video.set_transparency(102)  # 255 * 0.4 = 102
             # Pause the video immediately
             self.background_video.toggle_pause()
         except FileNotFoundError:
